@@ -1,0 +1,141 @@
+---
+  title: "Shiny Dash"
+  date: "16 June 2020"
+  output: html_document
+  runtime: shiny
+---
+
+rm(list=ls())
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+__Load required packages:__
+```{r loadpackages, message=FALSE}
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(e1071, caret, tidyverse, data.table, gains,xlsx,shiny,zoo,xts,lubridate,dplyr,ggplot2,shinydashboard,
+               reshape2,plotly,readr,imputeTS,leaflet,RColorBrewer,plotly,highcharter,Rfast,shinycssloaders,DT,
+               ggthemes,colorspace,ggmap,RCurl,RJSONIO,plyr,leaflet,leaflet.extras)
+
+```
+## ########################################## Loading the File ####################################################
+
+
+```{r data, include=FALSE}
+setwd("A:\\Work\\Aus_bushfire")
+df <- read_csv('Aus_bushfire.csv')
+```
+
+## ########################################## Data Cleaning ####################################################
+
+setwd("A:\\Work\\Aus_bushfire")
+
+```{r data, include=FALSE}
+df <- df %>% filter(Country== 'AU' )
+df$acq_month <-  months(as.POSIXlt(df$acq_date, format="%d-%m-%Y"))
+df$acq_day <- day(as.POSIXlt(df$acq_date, format="%d-%m-%Y"))
+```
+
+## ########################################### Shiny Dashboard #####################################################
+
+```{r UI, include=FALSE}
+ ui <- dashboardPage(
+  dashboardHeader(title = "Dashboard "),
+  dashboardSidebar(
+  tags$style(type="text/css",".shiny-output-error { visibility: hidden; }",
+                  ".shiny-output-error:before { visibility: hidden; }"),
+
+  width = 300,
+  sidebarMenu(
+  
+  menuItem("Heat Map", tabName = "HeatMap",icon = icon("dashboard"))
+  )
+),
+
+  dashboardBody(
+    tabItems(
+
+tabItem(tabName = "HeatMap",
+    fluidPage(
+        
+   sidebarLayout(
+  
+     sidebarPanel(
+       
+        sliderInput(inputId = "selected_Day", "Day:",
+                  min = 1, max =31,
+                  value = 1),
+
+       selectInput(inputId = "selected_Month",
+                   label = "Choose Month:",
+                   choices = c(unique(df$acq_month))),
+       
+       selectInput(inputId = "selected_State",
+                   label = "Choose Territory:",
+                   choices = c(unique(df$State)))
+    
+     ),
+
+     mainPanel(
+        leafletOutput(outputId = "heatmap",height = 600,width = "auto") %>% withSpinner(color="#0dc5c1"),
+        br(),br(),
+        plotlyOutput(outputId="barplot", width="500px",height="500px")
+       )
+   )
+ )
+ )
+ 
+
+)
+)
+)
+```
+
+## ########################################## Server ###### ############################################
+
+```{r server, include=FALSE}
+
+server <- function(input, output) {
+  
+ 
+     # Create scatterplot object the plotOutput function is expecting
+   
+   output$heatmap <- renderLeaflet({
+     
+     
+     df1<- df %>% filter(acq_month==input$selected_Month & acq_day == input$selected_Day)
+     
+    leaflet(df1) %>%
+    addProviderTiles(providers$Esri.WorldStreetMap) %>%
+    setView( 134.22436681269832, -27.031126703266906, 5 ) %>%
+    addHeatmap(
+      lng = ~longitude, lat = ~latitude, intensity = ~frp,
+      blur = 20, max = 0.05, radius = 20
+  )   
+   })
+    
+    output$barplot <- renderPlotly({
+      
+      df2<- df %>% subset(State == input$selected_State & acq_month == input$selected_Month)
+      df2 <- aggregate(df2$frp, by=list(df2$Region), FUN=max) %>% arrange(desc(x))
+      df2<- head(df2,5)
+      
+      plot_ly(df2, x = ~Group.1, y = ~x, type = 'bar', width =0.3, name = 'FRP',
+                     marker = list(color = 'rgb(205, 12, 24)',
+                                   line = list(color = 'transparent'))) %>%
+       
+       
+          layout(title = paste("Top 5 FRP Regions"),
+                 xaxis = list(title = "Regions"),
+                 yaxis = list(title = "FRP"),
+                 plot_bgcolor = "#FFFFFF",
+                 paper_bgcolor='#FFFFFF',
+                 bargap = 3)
+                })
+    
+}
+```
+
+```{r App, include=FALSE}
+shinyApp(ui = ui, server = server) 
+```
